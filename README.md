@@ -141,6 +141,83 @@ docker-compose up
 
 The server will be available at `http://localhost:8000`.
 
+## Integration with Claude Desktop
+
+### Method 1: Connect to Docker Server (HTTP Transport)
+
+If you're running the server in Docker, add it to Claude Desktop configuration:
+
+**Step 1:** Start the Docker server:
+```bash
+docker-compose up -d
+```
+
+**Step 2:** Edit Claude Desktop MCP configuration file:
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+**Step 3:** Add this configuration:
+
+```json
+{
+  "mcpServers": {
+    "icloud": {
+      "transport": {
+        "type": "sse",
+        "url": "http://localhost:8000/sse"
+      },
+      "env": {
+        "ICLOUD_EMAIL": "your-email@icloud.com",
+        "ICLOUD_APP_SPECIFIC_PASSWORD": "xxxx-xxxx-xxxx-xxxx"
+      }
+    }
+  }
+}
+```
+
+**Step 4:** Restart Claude Desktop
+
+### Method 2: Run Locally with stdio (Recommended)
+
+For better integration without Docker overhead:
+
+**Step 1:** Install dependencies locally:
+```bash
+pip install -r requirements.txt
+```
+
+**Step 2:** Edit Claude Desktop configuration:
+
+```json
+{
+  "mcpServers": {
+    "icloud": {
+      "command": "python",
+      "args": ["/absolute/path/to/icloud-mcp/run.py"],
+      "env": {
+        "ICLOUD_EMAIL": "your-email@icloud.com",
+        "ICLOUD_APP_SPECIFIC_PASSWORD": "xxxx-xxxx-xxxx-xxxx"
+      }
+    }
+  }
+}
+```
+
+Replace `/absolute/path/to/icloud-mcp/` with your actual path.
+
+**Step 3:** Restart Claude Desktop
+
+### Verification
+
+After restarting Claude Desktop:
+
+1. Open Claude Desktop
+2. Look for the 🔨 (hammer) icon in the bottom-right
+3. You should see "icloud" server listed
+4. Try using a tool: "List my calendars" or "Show my contacts"
+
 ### Example: Using with MCP Client
 
 ```python
