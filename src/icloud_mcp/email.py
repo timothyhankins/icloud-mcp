@@ -57,8 +57,9 @@ async def list_folders(context: Context) -> List[Dict[str, Any]]:
         List of folders with name and flags
     """
     username, password = require_auth(context)
+    client = _get_imap_client(username, password)
 
-    with _get_imap_client(username, password) as client:
+    try:
         folders = client.list_folders()
 
         result = []
@@ -70,6 +71,11 @@ async def list_folders(context: Context) -> List[Dict[str, Any]]:
             })
 
         return result
+    finally:
+        try:
+            client.logout()
+        except:
+            pass
 
 
 async def list_messages(
@@ -91,7 +97,9 @@ async def list_messages(
     """
     username, password = require_auth(context)
 
-    with _get_imap_client(username, password) as client:
+    client = _get_imap_client(username, password)
+    
+    try:
         client.select_folder(folder)
 
         # Search for messages
@@ -131,6 +139,12 @@ async def list_messages(
         return result
 
 
+    finally:
+        try:
+            client.logout()
+        except:
+            pass
+
 async def get_message(
     context: Context,
     message_id: str,
@@ -150,7 +164,9 @@ async def get_message(
     """
     username, password = require_auth(context)
 
-    with _get_imap_client(username, password) as client:
+    client = _get_imap_client(username, password)
+    
+    try:
         client.select_folder(folder)
 
         msg_id = int(message_id)
@@ -204,6 +220,12 @@ async def get_message(
         return result
 
 
+    finally:
+        try:
+            client.logout()
+        except:
+            pass
+
 async def search_messages(
     context: Context,
     query: str,
@@ -223,7 +245,9 @@ async def search_messages(
     """
     username, password = require_auth(context)
 
-    with _get_imap_client(username, password) as client:
+    client = _get_imap_client(username, password)
+    
+    try:
         client.select_folder(folder)
 
         # Search by subject or from
@@ -261,6 +285,12 @@ async def search_messages(
 
         return result
 
+
+    finally:
+        try:
+            client.logout()
+        except:
+            pass
 
 async def send_message(
     context: Context,
@@ -337,7 +367,9 @@ async def move_message(
     """
     username, password = require_auth(context)
 
-    with _get_imap_client(username, password) as client:
+    client = _get_imap_client(username, password)
+    
+    try:
         client.select_folder(from_folder)
         msg_id = int(message_id)
 
@@ -348,11 +380,15 @@ async def move_message(
         client.delete_messages([msg_id])
         client.expunge()
 
-    return {
-        "status": "success",
-        "message": f"Message {message_id} moved from {from_folder} to {to_folder}"
-    }
-
+        return {
+            "status": "success",
+            "message": f"Message {message_id} moved from {from_folder} to {to_folder}"
+        }
+    finally:
+        try:
+            client.logout()
+        except:
+            pass
 
 async def delete_message(
     context: Context,
@@ -373,7 +409,9 @@ async def delete_message(
     """
     username, password = require_auth(context)
 
-    with _get_imap_client(username, password) as client:
+    client = _get_imap_client(username, password)
+    
+    try:
         client.select_folder(folder)
         msg_id = int(message_id)
 
@@ -395,11 +433,15 @@ async def delete_message(
                 client.expunge()
                 message = f"Message {message_id} deleted"
 
-    return {
-        "status": "success",
-        "message": message
-    }
-
+        return {
+            "status": "success",
+            "message": message
+        }
+    finally:
+        try:
+            client.logout()
+        except:
+            pass
 
 async def mark_as_read(
     context: Context,
@@ -418,16 +460,22 @@ async def mark_as_read(
     """
     username, password = require_auth(context)
 
-    with _get_imap_client(username, password) as client:
+    client = _get_imap_client(username, password)
+    
+    try:
         client.select_folder(folder)
         msg_id = int(message_id)
         client.add_flags([msg_id], ['\\Seen'])
 
-    return {
-        "status": "success",
-        "message": f"Message {message_id} marked as read"
-    }
-
+        return {
+            "status": "success",
+            "message": f"Message {message_id} marked as read"
+        }
+    finally:
+        try:
+            client.logout()
+        except:
+            pass
 
 async def mark_as_unread(
     context: Context,
@@ -446,12 +494,19 @@ async def mark_as_unread(
     """
     username, password = require_auth(context)
 
-    with _get_imap_client(username, password) as client:
+    client = _get_imap_client(username, password)
+    
+    try:
         client.select_folder(folder)
         msg_id = int(message_id)
         client.remove_flags([msg_id], ['\\Seen'])
 
-    return {
-        "status": "success",
-        "message": f"Message {message_id} marked as unread"
-    }
+        return {
+            "status": "success",
+            "message": f"Message {message_id} marked as unread"
+        }
+    finally:
+        try:
+            client.logout()
+        except:
+            pass
