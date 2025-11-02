@@ -50,7 +50,7 @@ async def list_events(
     List calendar events with optional filtering.
 
     Args:
-        calendar_id: Specific calendar URL/ID (optional, defaults to primary calendar)
+        calendar_id: Specific calendar URL/ID (optional, defaults to all non-reminder calendars)
         start_date: Start date filter in ISO format (YYYY-MM-DD)
         end_date: End date filter in ISO format (YYYY-MM-DD)
 
@@ -61,37 +61,80 @@ async def list_events(
     client = _get_caldav_client(email, password)
     principal = client.principal()
 
-    # Get calendar
-    if calendar_id:
-        calendar = caldav.Calendar(client=client, url=calendar_id)
-    else:
-        calendars = principal.calendars()
-        if not calendars:
-            return []
-        calendar = calendars[0]
-
     # Parse dates
-    start = datetime.fromisoformat(start_date) if start_date else datetime.now() - timedelta(days=30)
+    start = datetime.fromisoformat(start_date) if start_date else datetime.now() - timedelta(days=90)
     end = datetime.fromisoformat(end_date) if end_date else datetime.now() + timedelta(days=365)
 
-    # Fetch events
-    events = calendar.date_search(start=start, end=end)
-
     result = []
-    for event in events:
+
+    # Get calendars
+    if calendar_id:
+        calendars_to_search = [caldav.Calendar(client=client, url=calendar_id)]
+    else:
+        all_calendars = principal.calendars()
+        if not all_calendars:
+            return []
+
+        # Filter out reminder calendars (they don't have events in the same format)
+        calendars_to_search = [
+            cal for cal in all_calendars
+            if cal.name and '⚠' not in cal.name and 'reminder' not in cal.name.lower()
+        ]
+
+        # If all calendars are filtered out, search all
+        if not calendars_to_search:
+            calendars_to_search = all_calendars
+
+    # Search events in all relevant calendars
+    for calendar in calendars_to_search:
         try:
-            vevent = event.vobject_instance.vevent
-            result.append({
-                "id": str(event.url),
-                "summary": str(vevent.summary.value) if hasattr(vevent, 'summary') else "",
-                "description": str(vevent.description.value) if hasattr(vevent, 'description') else "",
-                "start": vevent.dtstart.value.isoformat() if hasattr(vevent, 'dtstart') else None,
-                "end": vevent.dtend.value.isoformat() if hasattr(vevent, 'dtend') else None,
-                "location": str(vevent.location.value) if hasattr(vevent, 'location') else "",
-                "url": str(event.url)
-            })
+            # Fetch events using date_search
+            events = calendar.date_search(start=start, end=end, expand=True)
+
+            for event in events:
+                try:
+                    event.load()  # Ensure event data is loaded
+                    vevent = event.vobject_instance.vevent
+
+                    # Parse start/end dates safely
+                    start_value = None
+                    end_value = None
+
+                    if hasattr(vevent, 'dtstart') and vevent.dtstart:
+                        try:
+                            start_value = vevent.dtstart.value
+                            if hasattr(start_value, 'isoformat'):
+                                start_value = start_value.isoformat()
+                            else:
+                                start_value = str(start_value)
+                        except:
+                            pass
+
+                    if hasattr(vevent, 'dtend') and vevent.dtend:
+                        try:
+                            end_value = vevent.dtend.value
+                            if hasattr(end_value, 'isoformat'):
+                                end_value = end_value.isoformat()
+                            else:
+                                end_value = str(end_value)
+                        except:
+                            pass
+
+                    result.append({
+                        "id": str(event.url),
+                        "summary": str(vevent.summary.value) if hasattr(vevent, 'summary') and vevent.summary else "",
+                        "description": str(vevent.description.value) if hasattr(vevent, 'description') and vevent.description else "",
+                        "start": start_value,
+                        "end": end_value,
+                        "location": str(vevent.location.value) if hasattr(vevent, 'location') and vevent.location else "",
+                        "calendar": calendar.name or "Unknown",
+                        "url": str(event.url)
+                    })
+                except Exception as e:
+                    # Skip malformed events
+                    continue
         except Exception as e:
-            # Skip malformed events
+            # Skip calendars that fail to search
             continue
 
     return result

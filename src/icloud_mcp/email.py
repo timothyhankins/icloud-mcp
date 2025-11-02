@@ -16,9 +16,18 @@ from .config import config
 
 def _get_imap_client(username: str, password: str) -> IMAPClient:
     """Create IMAP client (stateless)."""
-    client = IMAPClient(config.IMAP_SERVER, port=config.IMAP_PORT, ssl=True)
+    client = IMAPClient(config.IMAP_SERVER, port=config.IMAP_PORT, ssl=True, use_uid=True)
     client.login(username, password)
     return client
+
+
+def _close_imap_client(client: IMAPClient) -> None:
+    """Safely close IMAP client connection."""
+    try:
+        # Use shutdown() instead of logout() to avoid "file property has no setter" error
+        client.shutdown()
+    except:
+        pass
 
 
 def _get_smtp_client(username: str, password: str) -> smtplib.SMTP:
@@ -73,7 +82,7 @@ async def list_folders(context: Context) -> List[Dict[str, Any]]:
         return result
     finally:
         try:
-            client.logout()
+            _close_imap_client(client)
         except:
             pass
 
@@ -141,7 +150,7 @@ async def list_messages(
 
     finally:
         try:
-            client.logout()
+            _close_imap_client(client)
         except:
             pass
 
@@ -222,7 +231,7 @@ async def get_message(
 
     finally:
         try:
-            client.logout()
+            _close_imap_client(client)
         except:
             pass
 
@@ -288,7 +297,7 @@ async def search_messages(
 
     finally:
         try:
-            client.logout()
+            _close_imap_client(client)
         except:
             pass
 
@@ -386,7 +395,7 @@ async def move_message(
         }
     finally:
         try:
-            client.logout()
+            _close_imap_client(client)
         except:
             pass
 
@@ -439,7 +448,7 @@ async def delete_message(
         }
     finally:
         try:
-            client.logout()
+            _close_imap_client(client)
         except:
             pass
 
@@ -473,7 +482,7 @@ async def mark_as_read(
         }
     finally:
         try:
-            client.logout()
+            _close_imap_client(client)
         except:
             pass
 
@@ -507,6 +516,6 @@ async def mark_as_unread(
         }
     finally:
         try:
-            client.logout()
+            _close_imap_client(client)
         except:
             pass
