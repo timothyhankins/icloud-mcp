@@ -62,8 +62,22 @@ async def list_events(
     principal = client.principal()
 
     # Parse dates
-    start = datetime.fromisoformat(start_date) if start_date else datetime.now() - timedelta(days=90)
-    end = datetime.fromisoformat(end_date) if end_date else datetime.now() + timedelta(days=365)
+    if start_date:
+        start = datetime.fromisoformat(start_date)
+        # If only date provided (no time), set to start of day
+        if len(start_date) == 10:  # Format: YYYY-MM-DD
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        start = datetime.now() - timedelta(days=90)
+
+    if end_date:
+        end = datetime.fromisoformat(end_date)
+        # If only date provided (no time), set to end of day
+        if len(end_date) == 10:  # Format: YYYY-MM-DD
+            # Add one day to include the entire end date
+            end = end.replace(hour=23, minute=59, second=59, microsecond=999999)
+    else:
+        end = datetime.now() + timedelta(days=365)
 
     result = []
 
@@ -147,6 +161,7 @@ async def create_event(
     end: str,
     description: Optional[str] = None,
     location: Optional[str] = None,
+    attendees: Optional[List[str]] = None,
     calendar_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
@@ -158,6 +173,7 @@ async def create_event(
         end: End datetime in ISO format
         description: Event description (optional)
         location: Event location (optional)
+        attendees: List of attendee email addresses to invite (optional)
         calendar_id: Target calendar URL/ID (optional, defaults to first non-reminder calendar)
 
     Returns:
@@ -217,6 +233,12 @@ SEQUENCE:0
         loc_escaped = location.replace('\\', '\\\\').replace(',', '\\,').replace(';', '\\;')
         ical_data += f"LOCATION:{loc_escaped}\n"
 
+    # Add attendees (meeting invitations)
+    if attendees:
+        for attendee_email in attendees:
+            # Format: ATTENDEE;CN=email;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:email
+            ical_data += f"ATTENDEE;CN={attendee_email};CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:{attendee_email}\n"
+
     ical_data += "END:VEVENT\nEND:VCALENDAR"
 
     # Create event using add_event (more reliable than save_event for iCloud)
@@ -233,6 +255,7 @@ SEQUENCE:0
         "end": end,
         "description": description or "",
         "location": location or "",
+        "attendees": attendees or [],
         "calendar": calendar.name,
         "url": str(event.url)
     }
@@ -245,7 +268,8 @@ async def update_event(
     start: Optional[str] = None,
     end: Optional[str] = None,
     description: Optional[str] = None,
-    location: Optional[str] = None
+    location: Optional[str] = None,
+    attendees: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Update an existing calendar event.
@@ -257,6 +281,7 @@ async def update_event(
         end: New end datetime in ISO format (optional)
         description: New description (optional)
         location: New location (optional)
+        attendees: New list of attendee email addresses (optional, replaces existing)
 
     Returns:
         Updated event details
@@ -288,8 +313,33 @@ async def update_event(
         else:
             vevent.add('location').value = location
 
+    # Update attendees
+    if attendees is not None:
+        # Remove existing attendees
+        if hasattr(vevent, 'attendee_list'):
+            for att in list(vevent.attendee_list):
+                vevent.remove(att)
+
+        # Add new attendees
+        for attendee_email in attendees:
+            att = vevent.add('attendee')
+            att.value = f'mailto:{attendee_email}'
+            att.params['CN'] = [attendee_email]
+            att.params['CUTYPE'] = ['INDIVIDUAL']
+            att.params['ROLE'] = ['REQ-PARTICIPANT']
+            att.params['PARTSTAT'] = ['NEEDS-ACTION']
+            att.params['RSVP'] = ['TRUE']
+
     # Save changes
     event.save()
+
+    # Extract attendees for response
+    attendee_list = []
+    if hasattr(vevent, 'attendee_list'):
+        for att in vevent.attendee_list:
+            if hasattr(att, 'value'):
+                email_addr = str(att.value).replace('mailto:', '')
+                attendee_list.append(email_addr)
 
     return {
         "id": str(event.url),
@@ -298,6 +348,7 @@ async def update_event(
         "end": vevent.dtend.value.isoformat() if hasattr(vevent, 'dtend') else None,
         "description": str(vevent.description.value) if hasattr(vevent, 'description') else "",
         "location": str(vevent.location.value) if hasattr(vevent, 'location') else "",
+        "attendees": attendee_list,
         "url": str(event.url)
     }
 
