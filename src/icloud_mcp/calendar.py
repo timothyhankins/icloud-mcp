@@ -289,9 +289,12 @@ async def update_event(
     email, password = require_auth(context)
     client = _get_caldav_client(email, password)
 
-    # Load existing event using CalendarObjectResource (handles full URLs correctly)
-    event = caldav.CalendarObjectResource(client=client, url=event_id)
-    event.load()
+    try:
+        # Load existing event using CalendarObjectResource (handles full URLs correctly)
+        event = caldav.CalendarObjectResource(client=client, url=event_id)
+        event.load()
+    except Exception as e:
+        raise Exception(f"Error loading event: {str(e)}")
 
     vevent = event.vobject_instance.vevent
 
@@ -331,7 +334,10 @@ async def update_event(
             att.params['RSVP'] = ['TRUE']
 
     # Save changes
-    event.save()
+    try:
+        event.save()
+    except Exception as e:
+        raise Exception(f"Error saving event: {str(e)}")
 
     # Extract attendees for response
     attendee_list = []
