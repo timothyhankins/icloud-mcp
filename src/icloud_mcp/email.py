@@ -269,6 +269,108 @@ async def get_message(
         except:
             pass
 
+
+async def get_messages(
+    context: Context,
+    message_ids: List[str],
+    folder: str = "INBOX",
+    include_body: bool = True
+) -> List[Dict[str, Any]]:
+    """
+    Get multiple messages at once.
+
+    Args:
+        message_ids: List of message IDs to fetch
+        folder: Folder name (default: INBOX)
+        include_body: Include message body content
+
+    Returns:
+        List of message details
+    """
+    try:
+        username, password = require_auth(context)
+        client = _get_imap_client(username, password)
+
+        client.select_folder(folder)
+
+        # Convert string IDs to integers
+        msg_ids = [int(mid) for mid in message_ids]
+
+        # Fetch all messages at once
+        response = client.fetch(msg_ids, [b'FLAGS', b'BODY.PEEK[]'])
+
+        results = []
+
+        for msg_id in msg_ids:
+            if msg_id not in response:
+                # Skip missing messages
+                continue
+
+            data = response[msg_id]
+
+            # Try multiple possible keys for the message body
+            raw_email = None
+            for key in [b'BODY[]', 'BODY[]', b'RFC822', 'RFC822', b'BODY.PEEK[]']:
+                if key in data:
+                    raw_email = data[key]
+                    break
+
+            if raw_email is None:
+                # Skip messages without body
+                continue
+
+            msg = email.message_from_bytes(raw_email)
+
+            result = {
+                "id": str(msg_id),
+                "subject": _decode_mime_header(msg.get('Subject', '')),
+                "from": _decode_mime_header(msg.get('From', '')),
+                "to": _decode_mime_header(msg.get('To', '')),
+                "cc": _decode_mime_header(msg.get('Cc', '')),
+                "date": msg.get('Date', ''),
+                "flags": [flag.decode() if isinstance(flag, bytes) else flag for flag in data.get(b'FLAGS', data.get('FLAGS', []))],
+                "folder": folder
+            }
+
+            if include_body:
+                # Extract body
+                body_text = ""
+                body_html = ""
+
+                if msg.is_multipart():
+                    for part in msg.walk():
+                        content_type = part.get_content_type()
+                        if content_type == "text/plain":
+                            try:
+                                body_text = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                            except:
+                                pass
+                        elif content_type == "text/html":
+                            try:
+                                body_html = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                            except:
+                                pass
+                else:
+                    try:
+                        body_text = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+                    except:
+                        pass
+
+                result["body_text"] = body_text
+                result["body_html"] = body_html
+
+            results.append(result)
+
+        return results
+
+    except Exception as e:
+        raise
+    finally:
+        try:
+            _close_imap_client(client)
+        except:
+            pass
+
 async def search_messages(
     context: Context,
     query: str,

@@ -158,7 +158,7 @@ async def create_event(
         end: End datetime in ISO format
         description: Event description (optional)
         location: Event location (optional)
-        calendar_id: Target calendar URL/ID (optional, defaults to primary)
+        calendar_id: Target calendar URL/ID (optional, defaults to first non-reminder calendar)
 
     Returns:
         Created event details
@@ -171,34 +171,60 @@ async def create_event(
     if calendar_id:
         calendar = caldav.Calendar(client=client, url=calendar_id)
     else:
-        calendars = principal.calendars()
-        if not calendars:
+        all_calendars = principal.calendars()
+        if not all_calendars:
             raise ValueError("No calendars found")
-        calendar = calendars[0]
 
-    # Build iCalendar data
+        # Filter out reminder/task calendars - they don't support VEVENT
+        event_calendars = [
+            cal for cal in all_calendars
+            if cal.name and '⚠' not in cal.name and 'reminder' not in cal.name.lower()
+        ]
+
+        if not event_calendars:
+            raise ValueError("No event calendars found (only reminder/task calendars available)")
+
+        calendar = event_calendars[0]
+
+    # Build iCalendar data with proper formatting for iCloud
     start_dt = datetime.fromisoformat(start)
     end_dt = datetime.fromisoformat(end)
+    now = datetime.now()
 
+    # Generate UID without dots (iCloud compatible)
+    uid = f"{int(now.timestamp())}{now.microsecond}@icloud-mcp"
+
+    # Build proper iCalendar format (iCloud is very strict about formatting)
     ical_data = f"""BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//iCloud MCP//EN
+CALSCALE:GREGORIAN
 BEGIN:VEVENT
-UID:{datetime.now().timestamp()}@icloud-mcp
+UID:{uid}
+DTSTAMP:{now.strftime('%Y%m%dT%H%M%SZ')}
 DTSTART:{start_dt.strftime('%Y%m%dT%H%M%S')}
 DTEND:{end_dt.strftime('%Y%m%dT%H%M%S')}
 SUMMARY:{summary}
+STATUS:CONFIRMED
+SEQUENCE:0
 """
 
     if description:
-        ical_data += f"DESCRIPTION:{description}\n"
+        # Escape special characters in description
+        desc_escaped = description.replace('\\', '\\\\').replace(',', '\\,').replace(';', '\\;').replace('\n', '\\n')
+        ical_data += f"DESCRIPTION:{desc_escaped}\n"
     if location:
-        ical_data += f"LOCATION:{location}\n"
+        loc_escaped = location.replace('\\', '\\\\').replace(',', '\\,').replace(';', '\\;')
+        ical_data += f"LOCATION:{loc_escaped}\n"
 
     ical_data += "END:VEVENT\nEND:VCALENDAR"
 
-    # Create event
-    event = calendar.save_event(ical_data)
+    # Create event using add_event (more reliable than save_event for iCloud)
+    try:
+        event = calendar.add_event(ical_data)
+    except Exception as e:
+        # If add_event fails, try save_event as fallback
+        raise ValueError(f"Failed to create event in calendar '{calendar.name}': {str(e)}")
 
     return {
         "id": str(event.url),
@@ -207,6 +233,7 @@ SUMMARY:{summary}
         "end": end,
         "description": description or "",
         "location": location or "",
+        "calendar": calendar.name,
         "url": str(event.url)
     }
 

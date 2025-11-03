@@ -343,6 +343,29 @@ async def email_get_message(
 
 
 @mcp.tool()
+async def email_get_messages(
+    context,
+    message_ids: list,
+    folder: str = "INBOX",
+    include_body: bool = True
+) -> list:
+    """
+    Get multiple messages at once (bulk fetch).
+
+    Args:
+        message_ids: List of message IDs to fetch
+        folder: Folder name (default: INBOX)
+        include_body: Include message body content (default: True)
+    """
+    try:
+        return await email_module.get_messages(context, message_ids, folder, include_body)
+    except AuthenticationError as e:
+        return {"error": str(e), "status": 401}
+    except Exception as e:
+        return {"error": str(e), "status": 500}
+
+
+@mcp.tool()
 async def email_search(
     context,
     query: str,
