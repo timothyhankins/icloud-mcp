@@ -3,6 +3,7 @@
 import imaplib
 import smtplib
 import email
+import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import decode_header
@@ -12,6 +13,14 @@ from fastmcp import Context
 from imapclient import IMAPClient
 from .auth import require_auth
 from .config import config
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    filename='/tmp/icloud_mcp_email.log'
+)
 
 
 def _get_imap_client(username: str, password: str) -> IMAPClient:
@@ -24,10 +33,18 @@ def _get_imap_client(username: str, password: str) -> IMAPClient:
 def _close_imap_client(client: IMAPClient) -> None:
     """Safely close IMAP client connection."""
     try:
-        # Use shutdown() instead of logout() to avoid "file property has no setter" error
-        client.shutdown()
-    except:
-        pass
+        logger.debug("Attempting to close IMAP connection")
+        # Don't call logout() - it causes "file property has no setter" error in Python 3.x
+        # The connection will be closed by garbage collection or timeout
+        # Just close the underlying socket
+        if hasattr(client, '_imap') and hasattr(client._imap, 'sock'):
+            try:
+                client._imap.sock.close()
+                logger.debug("IMAP socket closed successfully")
+            except Exception as e:
+                logger.warning(f"Failed to close socket: {e}")
+    except Exception as e:
+        logger.error(f"Error in _close_imap_client: {e}")
 
 
 def _get_smtp_client(username: str, password: str) -> smtplib.SMTP:
@@ -65,11 +82,18 @@ async def list_folders(context: Context) -> List[Dict[str, Any]]:
     Returns:
         List of folders with name and flags
     """
-    username, password = require_auth(context)
-    client = _get_imap_client(username, password)
-
     try:
+        logger.info("list_folders called")
+        username, password = require_auth(context)
+        logger.debug(f"Auth successful for user: {username[:3]}***")
+
+        logger.debug(f"Creating IMAP client to {config.IMAP_SERVER}:{config.IMAP_PORT}")
+        client = _get_imap_client(username, password)
+        logger.debug("IMAP client created and logged in")
+
+        logger.debug("Fetching folders")
         folders = client.list_folders()
+        logger.debug(f"Got {len(folders)} folders")
 
         result = []
         for flags, delimiter, name in folders:
@@ -79,12 +103,16 @@ async def list_folders(context: Context) -> List[Dict[str, Any]]:
                 "delimiter": delimiter
             })
 
+        logger.info(f"Returning {len(result)} folders")
         return result
+    except Exception as e:
+        logger.error(f"Error in list_folders: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise
     finally:
         try:
             _close_imap_client(client)
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Error closing client in finally: {e}")
 
 
 async def list_messages(
@@ -104,18 +132,27 @@ async def list_messages(
     Returns:
         List of messages with basic info
     """
-    username, password = require_auth(context)
-
-    client = _get_imap_client(username, password)
-    
     try:
+        logger.info(f"list_messages called: folder={folder}, limit={limit}, unread_only={unread_only}")
+        username, password = require_auth(context)
+        logger.debug(f"Auth successful")
+
+        client = _get_imap_client(username, password)
+        logger.debug("IMAP client created")
+
+        logger.debug(f"Selecting folder: {folder}")
         client.select_folder(folder)
+        logger.debug("Folder selected")
 
         # Search for messages
         if unread_only:
+            logger.debug("Searching for UNSEEN messages")
             messages = client.search(['UNSEEN'])
         else:
+            logger.debug("Searching for ALL messages")
             messages = client.search(['ALL'])
+
+        logger.debug(f"Found {len(messages)} messages")
 
         # Get most recent messages
         message_ids = list(messages)[-limit:] if len(messages) > limit else list(messages)
@@ -143,16 +180,20 @@ async def list_messages(
                     "folder": folder
                 })
             except Exception as e:
+                logger.warning(f"Failed to parse message {msg_id}: {e}")
                 continue
 
+        logger.info(f"Returning {len(result)} messages")
         return result
 
-
+    except Exception as e:
+        logger.error(f"Error in list_messages: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise
     finally:
         try:
             _close_imap_client(client)
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Error closing client: {e}")
 
 async def get_message(
     context: Context,
