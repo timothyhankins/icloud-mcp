@@ -29,6 +29,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Run in HTTP/SSE mode by default (for Cloud Run)
+# Run in HTTP/Streamable mode by default (for Cloud Run)
 # Use 0.0.0.0 to listen on all interfaces (required for Cloud Run)
-CMD sh -c "python -c \"from icloud_mcp.server import mcp; mcp.run(transport='sse', host='0.0.0.0', port=int('${PORT}'))\""
+CMD sh -c "python -c \"from icloud_mcp.server import mcp; mcp.run(transport='http', host='0.0.0.0', port=int('${PORT}'))\""
