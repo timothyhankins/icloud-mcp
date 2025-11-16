@@ -143,14 +143,40 @@ async def list_messages(
         if not message_ids:
             return []
 
-        # Fetch message headers
-        response = client.fetch(message_ids, ['FLAGS', 'RFC822.HEADER'])
+        # Fetch full message body to extract body_text
+        response = client.fetch(message_ids, [b'FLAGS', b'BODY.PEEK[]'])
 
         result = []
         for msg_id, data in response.items():
             try:
-                header_data = data[b'RFC822.HEADER']
-                msg = email.message_from_bytes(header_data)
+                # Try multiple possible keys for the message body
+                raw_email = None
+                for key in [b'BODY[]', 'BODY[]', b'RFC822', 'RFC822', b'BODY.PEEK[]']:
+                    if key in data:
+                        raw_email = data[key]
+                        break
+
+                if raw_email is None:
+                    continue
+
+                msg = email.message_from_bytes(raw_email)
+
+                # Extract body_text
+                body_text = ""
+                if msg.is_multipart():
+                    for part in msg.walk():
+                        content_type = part.get_content_type()
+                        if content_type == "text/plain":
+                            try:
+                                body_text = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                                break
+                            except Exception as _e:
+                                pass
+                else:
+                    try:
+                        body_text = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+                    except Exception as _e:
+                        pass
 
                 result.append({
                     "id": str(msg_id),
@@ -158,8 +184,9 @@ async def list_messages(
                     "from": _decode_mime_header(msg.get('From', '')),
                     "to": _decode_mime_header(msg.get('To', '')),
                     "date": msg.get('Date', ''),
-                    "flags": [flag.decode() if isinstance(flag, bytes) else flag for flag in data[b'FLAGS']],
-                    "folder": folder
+                    "flags": [flag.decode() if isinstance(flag, bytes) else flag for flag in data.get(b'FLAGS', data.get('FLAGS', []))],
+                    "folder": folder,
+                    "body_text": body_text
                 })
             except Exception as _e:
                 continue
