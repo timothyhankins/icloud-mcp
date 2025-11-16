@@ -28,7 +28,7 @@ async def health_check(request):
 # ============================================================================
 
 @mcp.tool()
-async def calendar_list_calendars(context) -> list:
+async def calendar_list_calendars(context) -> list | dict:
     """
     List all available calendars.
 
@@ -48,7 +48,7 @@ async def calendar_list_events(
     calendar_id: str = None,
     start_date: str = None,
     end_date: str = None
-) -> list:
+) -> list | dict:
     """
     List calendar events with optional filtering.
 
@@ -150,7 +150,7 @@ async def calendar_search_events(
     calendar_id: str = None,
     start_date: str = None,
     end_date: str = None
-) -> list:
+) -> list | dict:
     """
     Search for events by text query.
 
@@ -173,7 +173,7 @@ async def calendar_search_events(
 # ============================================================================
 
 @mcp.tool()
-async def contacts_list(context, limit: int = None) -> list:
+async def contacts_list(context, limit: int = None) -> list | dict:
     """
     List all contacts.
 
@@ -281,7 +281,7 @@ async def contacts_delete(context, contact_id: str) -> dict:
 
 
 @mcp.tool()
-async def contacts_search(context, query: str) -> list:
+async def contacts_search(context, query: str) -> list | dict:
     """
     Search for contacts by text query.
 
@@ -301,7 +301,7 @@ async def contacts_search(context, query: str) -> list:
 # ============================================================================
 
 @mcp.tool()
-async def email_list_folders(context) -> list:
+async def email_list_folders(context) -> list | dict:
     """
     List all email folders/mailboxes.
 
@@ -321,14 +321,16 @@ async def email_list_messages(
     folder: str = "INBOX",
     limit: int = 50,
     unread_only: bool = False
-) -> list:
+) -> list | dict:
     """
     List messages in a folder.
 
     Args:
-        folder: Folder name (default: INBOX)
+        folder: Folder name (default: INBOX). Common folder names: INBOX, Sent Messages, Drafts, Trash, Archive
         limit: Maximum number of messages to return (default: 50)
         unread_only: Only return unread messages (default: False)
+
+    Note: The Sent folder may be named "Sent Messages", "Sent", or "Sent Items" depending on your email provider.
     """
     try:
         return await email_module.list_messages(context, folder, limit, unread_only)
@@ -343,7 +345,8 @@ async def email_get_message(
     context,
     message_id: str,
     folder: str = "INBOX",
-    include_body: bool = True
+    include_body: bool = True,
+    full_html: bool = False
 ) -> dict:
     """
     Get a specific message with full details.
@@ -352,9 +355,10 @@ async def email_get_message(
         message_id: Message ID
         folder: Folder name (default: INBOX)
         include_body: Include message body content (default: True)
+        full_html: Include full HTML body (default: False, only text body returned)
     """
     try:
-        return await email_module.get_message(context, message_id, folder, include_body)
+        return await email_module.get_message(context, message_id, folder, include_body, full_html)
     except AuthenticationError as e:
         return {"error": str(e), "status": 401}
     except Exception as e:
@@ -366,8 +370,9 @@ async def email_get_messages(
     context,
     message_ids: list[str],
     folder: str = "INBOX",
-    include_body: bool = True
-) -> list:
+    include_body: bool = True,
+    full_html: bool = False
+) -> list | dict:
     """
     Get multiple messages at once (bulk fetch).
 
@@ -375,9 +380,10 @@ async def email_get_messages(
         message_ids: List of message IDs to fetch
         folder: Folder name (default: INBOX)
         include_body: Include message body content (default: True)
+        full_html: Include full HTML body (default: False, only text body returned)
     """
     try:
-        return await email_module.get_messages(context, message_ids, folder, include_body)
+        return await email_module.get_messages(context, message_ids, folder, include_body, full_html)
     except AuthenticationError as e:
         return {"error": str(e), "status": 401}
     except Exception as e:
@@ -390,7 +396,7 @@ async def email_search(
     query: str,
     folder: str = "INBOX",
     limit: int = 50
-) -> list:
+) -> list | dict:
     """
     Search for messages by text query.
 
