@@ -31,4 +31,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 
 # Run in SSE mode for Railway
 ENV MCP_TRANSPORT=sse
-CMD sh -c "python -c \"from icloud_mcp.server import mcp; mcp.run(transport='sse', host='0.0.0.0', port=int('${PORT}'))\""
+CMD ["python", "-c", "from icloud_mcp.server import main; main()"]
