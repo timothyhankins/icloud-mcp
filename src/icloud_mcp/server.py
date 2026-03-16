@@ -11,15 +11,24 @@ PIN gate on authorize step if MCP_AUTH_PIN is set.
 
 import os
 import sys
+import traceback
 
-from dotenv import load_dotenv
-from mcp.server.fastmcp import FastMCP
+print("[icloud-mcp] Module loading...", file=sys.stderr, flush=True)
 
-from . import calendar, contacts, email as email_module
-from .auth import AuthenticationError
-from .config import config
+try:
+    from dotenv import load_dotenv
+    from mcp.server.fastmcp import FastMCP
 
-load_dotenv()
+    from . import calendar, contacts, email as email_module
+    from .auth import AuthenticationError
+    from .config import config
+
+    load_dotenv()
+    print("[icloud-mcp] Imports OK", file=sys.stderr, flush=True)
+except Exception as e:
+    print(f"[icloud-mcp] IMPORT ERROR: {e}", file=sys.stderr, flush=True)
+    traceback.print_exc(file=sys.stderr)
+    raise
 
 # Determine transport mode early — host/port are set at init time
 _use_sse = "--http" in sys.argv or os.environ.get("MCP_TRANSPORT") == "sse"
@@ -733,12 +742,19 @@ async def email_mark_unread(
 
 def main():
     import sys
+    import traceback
     print(f"[icloud-mcp] Starting, _use_sse={_use_sse}", file=sys.stderr, flush=True)
     print(f"[icloud-mcp] host={mcp.settings.host} port={mcp.settings.port}", file=sys.stderr, flush=True)
-    if _use_sse:
-        mcp.run(transport="sse")
-    else:
-        mcp.run(transport="stdio")
+    print(f"[icloud-mcp] PORT env={os.environ.get('PORT')} HOST env={os.environ.get('HOST')}", file=sys.stderr, flush=True)
+    try:
+        if _use_sse:
+            mcp.run(transport="sse")
+        else:
+            mcp.run(transport="stdio")
+    except Exception as e:
+        print(f"[icloud-mcp] FATAL: {e}", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
