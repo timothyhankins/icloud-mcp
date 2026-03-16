@@ -3,7 +3,7 @@ dockerfilePath = "Dockerfile"
 watchPatterns = ["src/**", "Dockerfile", "pyproject.toml", "railway.toml"]
 
 [deploy]
-healthcheckPath = "/.well-known/oauth-authorization-server"
-healthcheckTimeout = 30
+healthcheckPath = "/health"
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
