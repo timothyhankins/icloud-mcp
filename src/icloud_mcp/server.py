@@ -732,6 +732,9 @@ async def email_mark_unread(
 # ============================================================================
 
 def main():
+    import sys
+    print(f"[icloud-mcp] Starting, _use_sse={_use_sse}", file=sys.stderr, flush=True)
+    print(f"[icloud-mcp] host={mcp.settings.host} port={mcp.settings.port}", file=sys.stderr, flush=True)
     if _use_sse:
         mcp.run(transport="sse")
     else:

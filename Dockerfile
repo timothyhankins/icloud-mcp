@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir .
 # Railway sets PORT env var automatically
 ENV MCP_TRANSPORT=sse
 ENV HOST=0.0.0.0
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
