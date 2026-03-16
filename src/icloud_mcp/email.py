@@ -11,7 +11,7 @@ from email.mime.multipart import MIMEMultipart
 from email.header import decode_header
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from fastmcp import Context
+from mcp.server.fastmcp import Context
 from imapclient import IMAPClient
 from .auth import require_auth
 from .config import config

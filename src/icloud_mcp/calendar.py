@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 from urllib.parse import urlparse
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from fastmcp import Context
+from mcp.server.fastmcp import Context
 from .auth import require_auth
 from .config import config
 

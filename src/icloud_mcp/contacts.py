@@ -4,7 +4,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 import vobject
 from typing import List, Dict, Any, Optional
-from fastmcp import Context
+from mcp.server.fastmcp import Context
 from .auth import require_auth
 from .config import config
 import xml.etree.ElementTree as ET
