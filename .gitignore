@@ -28,6 +28,9 @@ ENV/
 # Environment variables
 .env
 
+# MCP config (contains bearer tokens)
+.mcp.json
+
 # IDE
 .vscode/
 .idea/

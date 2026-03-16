@@ -139,7 +139,7 @@ async def list_calendars(context: Context) -> List[Dict[str, Any]]:
     Returns:
         List of calendars with id, name, and description
     """
-    email, password = require_auth(context)
+    email, password = require_auth()
     client = _get_caldav_client(email, password)
     principal = client.principal()
     calendars = principal.calendars()
@@ -172,7 +172,7 @@ async def list_events(
     Returns:
         List of events with details
     """
-    email, password = require_auth(context)
+    email, password = require_auth()
     client = _get_caldav_client(email, password)
     principal = client.principal()
 
@@ -294,7 +294,7 @@ async def create_event(
     Returns:
         Created event details
     """
-    email, password = require_auth(context)
+    email, password = require_auth()
     client = _get_caldav_client(email, password)
     principal = client.principal()
 
@@ -422,7 +422,7 @@ async def update_event(
     Returns:
         Updated event details
     """
-    email, password = require_auth(context)
+    email, password = require_auth()
 
     # Create a client with the correct base URL for this specific event
     # This prevents URL joining errors when event is on a different server (e.g., p72-caldav.icloud.com)
@@ -537,7 +537,7 @@ async def delete_event(context: Context, event_id: str) -> Dict[str, str]:
     Returns:
         Confirmation message
     """
-    email, password = require_auth(context)
+    email, password = require_auth()
 
     # Create a client with the correct base URL for this specific event
     # This prevents URL joining errors when event is on a different server (e.g., p72-caldav.icloud.com)

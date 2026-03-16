@@ -1,11 +1,84 @@
-"""FastMCP server for iCloud integration."""
+"""iCloud MCP Server.
 
-from fastmcp import FastMCP
+CalDAV, CardDAV, and IMAP/SMTP access for Claude.
+
+Local:   python run.py              (stdio for Claude Code)
+Remote:  python run.py --http       (SSE for Railway / Claude.ai)
+
+OAuth 2.0 auth for Claude.ai connector; static bearer token for Claude Code.
+PIN gate on authorize step if MCP_AUTH_PIN is set.
+"""
+
+import os
+import sys
+
+from dotenv import load_dotenv
+from mcp.server.fastmcp import FastMCP
+
 from . import calendar, contacts, email as email_module
 from .auth import AuthenticationError
+from .config import config
 
-# Initialize FastMCP server
-mcp = FastMCP("iCloud MCP Server")
+load_dotenv()
+
+# Determine transport mode early — host/port are set at init time
+_use_sse = "--http" in sys.argv or os.environ.get("MCP_TRANSPORT") == "sse"
+
+# Module-level reference to the OAuth provider (needed by the PIN route handler)
+_oauth_provider = None
+
+
+def _build_mcp() -> FastMCP:
+    """Build the FastMCP instance with optional OAuth for SSE mode."""
+    global _oauth_provider
+
+    if not _use_sse:
+        return FastMCP("iCloud MCP Server")
+
+    auth_token = os.environ.get("MCP_AUTH_TOKEN")
+    auth_pin = os.environ.get("MCP_AUTH_PIN")
+    base_url = os.environ.get("MCP_BASE_URL", "")
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", config.MCP_SERVER_PORT))
+
+    if auth_token:
+        from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
+
+        from .oauth import ICloudOAuthProvider
+
+        _oauth_provider = ICloudOAuthProvider(
+            auth_token=auth_token,
+            auth_pin=auth_pin,
+            base_url=base_url,
+        )
+
+        return FastMCP(
+            "iCloud MCP Server",
+            host=host,
+            port=port,
+            auth=AuthSettings(
+                issuer_url=base_url,
+                resource_server_url=base_url,
+                client_registration_options=ClientRegistrationOptions(
+                    enabled=True,
+                    valid_scopes=["read", "write"],
+                    default_scopes=["read", "write"],
+                ),
+                revocation_options=None,
+                required_scopes=[],
+            ),
+            auth_server_provider=_oauth_provider,
+        )
+    else:
+        # No auth token — run without auth (local dev)
+        return FastMCP(
+            "iCloud MCP Server",
+            host=host,
+            port=port,
+        )
+
+
+mcp = _build_mcp()
 
 
 # ============================================================================
@@ -14,13 +87,137 @@ mcp = FastMCP("iCloud MCP Server")
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request):
-    """Health check endpoint for Cloud Run and Docker."""
+    """Health check endpoint for Railway."""
     from starlette.responses import JSONResponse
     return JSONResponse({
         "status": "healthy",
         "service": "icloud-mcp",
-        "transport": "sse"
+        "transport": "sse" if _use_sse else "stdio"
     })
+
+
+# ============================================================================
+# PIN Confirmation Route (public, no auth required)
+# ============================================================================
+
+PIN_PAGE_HTML = """<!DOCTYPE html>
+<html>
+<head>
+    <title>iCloud MCP — Authorize</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }}
+        .card {{
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 360px;
+            width: 90%;
+            text-align: center;
+        }}
+        h1 {{
+            font-size: 1.4rem;
+            margin: 0 0 0.5rem;
+        }}
+        p {{
+            color: #888;
+            font-size: 0.9rem;
+            margin: 0 0 1.5rem;
+        }}
+        input[type="password"] {{
+            width: 100%;
+            padding: 12px;
+            font-size: 1.1rem;
+            border: 1px solid #444;
+            border-radius: 8px;
+            background: #111;
+            color: #fff;
+            text-align: center;
+            letter-spacing: 0.3em;
+            box-sizing: border-box;
+            margin-bottom: 1rem;
+        }}
+        input[type="password"]:focus {{
+            outline: none;
+            border-color: #6366f1;
+        }}
+        button {{
+            width: 100%;
+            padding: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            background: #6366f1;
+            color: #fff;
+            cursor: pointer;
+        }}
+        button:hover {{
+            background: #5558e6;
+        }}
+        .error {{
+            color: #ef4444;
+            font-size: 0.85rem;
+            margin-top: 0.75rem;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>iCloud MCP</h1>
+        <p>Enter your PIN to authorize this connection.</p>
+        <form method="POST">
+            <input type="hidden" name="session" value="{session}">
+            <input type="password" name="pin" placeholder="PIN" autofocus>
+            <button type="submit">Authorize</button>
+            {error}
+        </form>
+    </div>
+</body>
+</html>"""
+
+
+@mcp.custom_route("/confirm-pin", methods=["GET", "POST"])
+async def confirm_pin(request):
+    from starlette.responses import HTMLResponse, RedirectResponse
+
+    if _oauth_provider is None:
+        return HTMLResponse("<h1>Auth not configured</h1>", status_code=500)
+
+    if request.method == "GET":
+        session = request.query_params.get("session", "")
+        return HTMLResponse(
+            PIN_PAGE_HTML.format(session=session, error=""),
+            status_code=200,
+        )
+
+    # POST — validate PIN
+    form = await request.form()
+    session_id = form.get("session", "")
+    pin = form.get("pin", "")
+
+    redirect_url = _oauth_provider.confirm_pin(session_id, pin)
+
+    if redirect_url is None:
+        return HTMLResponse(
+            PIN_PAGE_HTML.format(
+                session=session_id,
+                error='<p class="error">Invalid PIN. Try again.</p>',
+            ),
+            status_code=200,
+        )
+
+    return RedirectResponse(url=redirect_url, status_code=302)
 
 
 # ============================================================================
@@ -534,17 +731,12 @@ async def email_mark_unread(
 # Server Entrypoint
 # ============================================================================
 
-def run():
-    """Run the MCP server."""
-    from .config import config as app_config
-    mcp.run(transport="stdio")
-
-
-def run_http():
-    """Run the MCP server with HTTP transport."""
-    from .config import config as app_config
-    mcp.run(transport="sse", port=app_config.MCP_SERVER_PORT)
+def main():
+    if _use_sse:
+        mcp.run(transport="sse")
+    else:
+        mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":
-    run()
+    main()

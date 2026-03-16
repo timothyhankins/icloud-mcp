@@ -25,6 +25,11 @@ class Config:
     # Email folders
     SENT_FOLDER: str = os.getenv("SENT_FOLDER", "Sent Messages")
 
+    # OAuth / MCP auth
+    MCP_AUTH_TOKEN: Optional[str] = os.getenv("MCP_AUTH_TOKEN")
+    MCP_AUTH_PIN: Optional[str] = os.getenv("MCP_AUTH_PIN")
+    MCP_BASE_URL: str = os.getenv("MCP_BASE_URL", "")
+
     # Fallback credentials (if not provided in headers)
     FALLBACK_EMAIL: Optional[str] = os.getenv("ICLOUD_EMAIL")
     FALLBACK_PASSWORD: Optional[str] = os.getenv("ICLOUD_APP_SPECIFIC_PASSWORD")

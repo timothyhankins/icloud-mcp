@@ -25,10 +25,10 @@ USER app
 ENV PORT=8000
 EXPOSE 8000
 
-# Health check
+# Health check — uses OAuth metadata endpoint (public, no auth required)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+    CMD curl -f http://localhost:${PORT}/.well-known/oauth-authorization-server || curl -f http://localhost:${PORT}/health || exit 1
 
-# Run in HTTP/Streamable mode by default (for Cloud Run)
-# Use 0.0.0.0 to listen on all interfaces (required for Cloud Run)
-CMD sh -c "python -c \"from icloud_mcp.server import mcp; mcp.run(transport='http', host='0.0.0.0', port=int('${PORT}'))\""
+# Run in SSE mode for Railway
+ENV MCP_TRANSPORT=sse
+CMD sh -c "python -c \"from icloud_mcp.server import mcp; mcp.run(transport='sse', host='0.0.0.0', port=int('${PORT}'))\""

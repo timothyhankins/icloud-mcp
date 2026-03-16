@@ -82,7 +82,7 @@ async def list_folders(context: Context) -> List[Dict[str, Any]]:
         List of folders with name and flags
     """
     try:
-        username, password = require_auth(context)
+        username, password = require_auth()
 
         client = _get_imap_client(username, password)
 
@@ -123,7 +123,7 @@ async def list_messages(
     Returns:
     """
     try:
-        username, password = require_auth(context)
+        username, password = require_auth()
 
         client = _get_imap_client(username, password)
 
@@ -203,7 +203,7 @@ async def get_message(
         Complete message details
     """
     try:
-        username, password = require_auth(context)
+        username, password = require_auth()
         client = _get_imap_client(username, password)
 
         client.select_folder(folder)
@@ -302,7 +302,7 @@ async def get_messages(
         List of message details
     """
     try:
-        username, password = require_auth(context)
+        username, password = require_auth()
         client = _get_imap_client(username, password)
 
         client.select_folder(folder)
@@ -403,7 +403,7 @@ async def search_messages(
     Returns:
         List of matching messages
     """
-    username, password = require_auth(context)
+    username, password = require_auth()
     client = _get_imap_client(username, password)
 
     try:
@@ -540,7 +540,7 @@ async def send_message(
     Returns:
         Confirmation message
     """
-    username, password = require_auth(context)
+    username, password = require_auth()
 
     # Create message
     msg = MIMEMultipart('alternative') if html else MIMEText(body)
@@ -627,7 +627,7 @@ async def move_message(
     Returns:
         Confirmation message
     """
-    username, password = require_auth(context)
+    username, password = require_auth()
 
     client = _get_imap_client(username, password)
     
@@ -669,7 +669,7 @@ async def delete_message(
     Returns:
         Confirmation message
     """
-    username, password = require_auth(context)
+    username, password = require_auth()
 
     client = _get_imap_client(username, password)
     
@@ -720,7 +720,7 @@ async def mark_as_read(
     Returns:
         Confirmation message
     """
-    username, password = require_auth(context)
+    username, password = require_auth()
 
     client = _get_imap_client(username, password)
     
@@ -754,7 +754,7 @@ async def mark_as_unread(
     Returns:
         Confirmation message
     """
-    username, password = require_auth(context)
+    username, password = require_auth()
 
     client = _get_imap_client(username, password)
     

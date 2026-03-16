@@ -162,7 +162,7 @@ async def list_contacts(
     Returns:
         List of contacts with name, phone, email, address
     """
-    email, password = require_auth(context)
+    email, password = require_auth()
     session, _ = _get_carddav_session(email, password)
     
     try:
@@ -253,7 +253,7 @@ async def get_contact(context: Context, contact_id: str) -> Dict[str, Any]:
     Returns:
         Contact details
     """
-    email, password = require_auth(context)
+    email, password = require_auth()
     session, _ = _get_carddav_session(email, password)
     
     try:
@@ -317,7 +317,7 @@ async def create_contact(
     Returns:
         Created contact details
     """
-    email, password = require_auth(context)
+    email, password = require_auth()
     session, _ = _get_carddav_session(email, password)
     
     try:
@@ -424,7 +424,7 @@ async def update_contact(
     Returns:
         Updated contact details
     """
-    email, password = require_auth(context)
+    email, password = require_auth()
     session, _ = _get_carddav_session(email, password)
     
     try:
@@ -518,7 +518,7 @@ async def delete_contact(context: Context, contact_id: str) -> Dict[str, str]:
     Returns:
         Confirmation message
     """
-    email, password = require_auth(context)
+    email, password = require_auth()
     session, _ = _get_carddav_session(email, password)
     
     try:
