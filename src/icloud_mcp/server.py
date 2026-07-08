@@ -221,6 +221,68 @@ async def confirm_pin(request):
 
 
 # ============================================================================
+# Smart Folder Endpoints (token-gated REST for iOS Shortcuts)
+# ============================================================================
+
+def _smartfolder_token(request) -> str | None:
+    return request.query_params.get("token") or request.headers.get("x-token")
+
+
+@mcp.custom_route("/smartfolders", methods=["GET"])
+async def smartfolders_index(request):
+    """List available smart folder preset names."""
+    from starlette.responses import JSONResponse
+
+    from . import smartfolders
+
+    if not smartfolders.check_token(_smartfolder_token(request)):
+        return JSONResponse({"error": "unauthorized"}, status_code=403)
+    return JSONResponse({"smartfolders": sorted(smartfolders.get_presets().keys())})
+
+
+@mcp.custom_route("/smartfolders/{name}", methods=["GET"])
+async def smartfolders_run(request):
+    """Run a named smart folder preset, or an ad-hoc search via name 'query'.
+
+    Query params (override preset values): to, from, subject, text, unread,
+    flagged, days, folders, limit, name. Add format=json for structured
+    output; default is a plain-text digest for Shortcuts' Show action.
+    """
+    from starlette.responses import JSONResponse, PlainTextResponse
+
+    from . import smartfolders
+
+    if not smartfolders.check_token(_smartfolder_token(request)):
+        return JSONResponse({"error": "unauthorized"}, status_code=403)
+
+    name = request.path_params["name"]
+    params: dict = {}
+    if name != "query":
+        preset = smartfolders.get_presets().get(name)
+        if preset is None:
+            return JSONResponse(
+                {"error": f"unknown smart folder: {name}"}, status_code=404
+            )
+        params.update(preset)
+        params.setdefault("name", name)
+    params.update({
+        k: v for k, v in request.query_params.items()
+        if k not in ("token", "format")
+    })
+
+    try:
+        result = smartfolders.run_search(params)
+    except AuthenticationError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    if request.query_params.get("format") == "json":
+        return JSONResponse(result)
+    return PlainTextResponse(result["text"])
+
+
+# ============================================================================
 # Calendar Tools (CalDAV)
 # ============================================================================
 
