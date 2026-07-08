@@ -15,10 +15,12 @@ All IMAP access is read-only (folders are selected with readonly=True).
 
 import email
 import hmac
+import html as html_escape
 import json
 import logging
 import os
 import sys
+import urllib.parse
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional
@@ -168,6 +170,9 @@ def run_search(params: Dict[str, Any]) -> Dict[str, Any]:
                 flags = data.get(b"FLAGS", data.get("FLAGS", []))
                 flags = [f.decode() if isinstance(f, bytes) else f for f in flags]
                 subject = _decode_mime_header(msg.get("Subject", ""))
+                # message:// deep links resolve on iOS/macOS for messages Mail
+                # has synced on-device; unresolvable ones just open Mail.
+                mid = (msg.get("Message-ID") or "").strip()
                 collected.append({
                     "id": str(msg_id),
                     "folder": folder,
@@ -177,6 +182,9 @@ def run_search(params: Dict[str, Any]) -> Dict[str, Any]:
                     "date": _parse_message_date(msg).isoformat(),
                     "_sort": _parse_message_date(msg),
                     "unread": "\\Seen" not in flags,
+                    "message_url": (
+                        "message://" + urllib.parse.quote(mid, safe="") if mid else ""
+                    ),
                 })
     finally:
         if client is not None:
@@ -205,6 +213,14 @@ def _sender_display(from_header: str) -> str:
     return name if name else addr.rstrip(">").strip() or from_header
 
 
+def _format_when(iso_date: str) -> str:
+    try:
+        stamp = datetime.fromisoformat(iso_date).astimezone(_digest_tz())
+        return stamp.strftime("%a %b %-d, %-I:%M %p")
+    except Exception as _e:
+        return iso_date
+
+
 def _format_digest(name: str, folders: List[str], total: int,
                    messages: List[Dict[str, Any]]) -> str:
     """Plain-text digest a Shortcut can pass straight to a Show action."""
@@ -217,19 +233,99 @@ def _format_digest(name: str, folders: List[str], total: int,
     if total > shown:
         header += f" (showing {shown})"
 
-    tz = _digest_tz()
     show_folder = len(folders) > 1
     lines = [header, ""]
     for m in messages:
         marker = "●" if m["unread"] else "○"
         lines.append(f"{marker} {_sender_display(m['from'])} — {m['subject']}")
-        try:
-            stamp = datetime.fromisoformat(m["date"]).astimezone(tz)
-            when = stamp.strftime("%a %b %-d, %-I:%M %p")
-        except Exception as _e:
-            when = m["date"]
-        meta = f"   {when}"
+        meta = f"   {_format_when(m['date'])}"
         if show_folder:
             meta += f" · {m['folder']}"
         lines.append(meta)
     return "\n".join(lines)
+
+
+HTML_PAGE = """<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<style>
+  :root {{
+    color-scheme: light dark;
+    --bg: #111; --fg: #e5e5e5; --dim: #8a8a8a; --line: #2a2a2a;
+    --accent: #6366f1;
+  }}
+  @media (prefers-color-scheme: light) {{
+    :root {{ --bg: #fff; --fg: #1a1a1a; --dim: #767676; --line: #e5e5e5; }}
+  }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--fg);
+    margin: 0; padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+    -webkit-text-size-adjust: 100%;
+  }}
+  h1 {{ font-size: 1.15rem; margin: 0.25rem 0 0.15rem; }}
+  .sub {{ color: var(--dim); font-size: 0.85rem; margin-bottom: 0.5rem; }}
+  .row {{
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 12px 2px; border-bottom: 1px solid var(--line);
+    text-decoration: none; color: inherit;
+  }}
+  .dot {{
+    flex: none; width: 9px; height: 9px; border-radius: 50%;
+    margin-top: 6px; background: transparent;
+  }}
+  .unread .dot {{ background: var(--accent); }}
+  .txt {{ min-width: 0; }}
+  .s {{ font-size: 0.95rem; }}
+  .unread .s {{ font-weight: 650; }}
+  .j {{ font-size: 0.9rem; color: var(--dim); margin-top: 1px; overflow-wrap: anywhere; }}
+  .unread .j {{ color: var(--fg); }}
+  .t {{ font-size: 0.78rem; color: var(--dim); margin-top: 2px; }}
+  .empty {{ color: var(--dim); padding: 24px 0; }}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="sub">{sub}</div>
+{rows}
+</body>
+</html>"""
+
+
+def render_html(result: Dict[str, Any]) -> str:
+    """Tappable HTML view — each row deep-links into Mail via message://."""
+    esc = html_escape.escape
+    name = esc(result["name"])
+    show_folder = len(result["folders"]) > 1
+
+    if not result["messages"]:
+        rows = '<div class="empty">No matching messages.</div>'
+        sub = "nothing matched"
+    else:
+        shown = len(result["messages"])
+        sub = f"{result['unread']} unread · {result['total_matched']} matched"
+        if result["total_matched"] > shown:
+            sub += f" (showing {shown})"
+        parts = []
+        for m in result["messages"]:
+            when = esc(_format_when(m["date"]))
+            if show_folder:
+                when += f" · {esc(m['folder'])}"
+            inner = (
+                f'<span class="dot"></span><div class="txt">'
+                f'<div class="s">{esc(_sender_display(m["from"]))}</div>'
+                f'<div class="j">{esc(m["subject"])}</div>'
+                f'<div class="t">{when}</div></div>'
+            )
+            cls = "row unread" if m["unread"] else "row"
+            url = m.get("message_url")
+            if url:
+                parts.append(f'<a class="{cls}" href="{esc(url)}">{inner}</a>')
+            else:
+                parts.append(f'<div class="{cls}">{inner}</div>')
+        rows = "\n".join(parts)
+
+    return HTML_PAGE.format(title=name, sub=sub, rows=rows)

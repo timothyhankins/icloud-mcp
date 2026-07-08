@@ -246,9 +246,10 @@ async def smartfolders_run(request):
 
     Query params (override preset values): to, from, subject, text, unread,
     flagged, days, folders, limit, name. Add format=json for structured
-    output; default is a plain-text digest for Shortcuts' Show action.
+    output or format=html for a tappable page (rows deep-link into Mail);
+    default is a plain-text digest for Shortcuts' Show action.
     """
-    from starlette.responses import JSONResponse, PlainTextResponse
+    from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
     from . import smartfolders
 
@@ -277,8 +278,11 @@ async def smartfolders_run(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
-    if request.query_params.get("format") == "json":
+    fmt = request.query_params.get("format")
+    if fmt == "json":
         return JSONResponse(result)
+    if fmt == "html":
+        return HTMLResponse(smartfolders.render_html(result))
     return PlainTextResponse(result["text"])
 
 
