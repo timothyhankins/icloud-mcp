@@ -295,11 +295,24 @@ HTML_PAGE = """<!DOCTYPE html>
 </html>"""
 
 
-def render_html(result: Dict[str, Any]) -> str:
-    """Tappable HTML view — each row deep-links into Mail via message://."""
+DEFAULT_LINK_DAYS = 2.0
+
+
+def render_html(result: Dict[str, Any], link_days: Any = None) -> str:
+    """Tappable HTML view — recent rows deep-link into Mail via message://.
+
+    iOS Mail's deep-link resolver only covers a persistent index of recent
+    mail (device-characterized 2026-07-08), so rows older than link_days
+    render as plain text rather than links that silently go nowhere.
+    """
     esc = html_escape.escape
     name = esc(result["name"])
     show_folder = len(result["folders"]) > 1
+    try:
+        window = float(link_days) if link_days is not None else DEFAULT_LINK_DAYS
+    except (TypeError, ValueError):
+        window = DEFAULT_LINK_DAYS
+    link_cutoff = datetime.now(timezone.utc) - timedelta(days=window)
 
     if not result["messages"]:
         rows = '<div class="empty">No matching messages.</div>'
@@ -322,7 +335,11 @@ def render_html(result: Dict[str, Any]) -> str:
             )
             cls = "row unread" if m["unread"] else "row"
             url = m.get("message_url")
-            if url:
+            try:
+                recent = datetime.fromisoformat(m["date"]) >= link_cutoff
+            except (TypeError, ValueError):
+                recent = False
+            if url and window > 0 and recent:
                 parts.append(f'<a class="{cls}" href="{esc(url)}">{inner}</a>')
             else:
                 parts.append(f'<div class="{cls}">{inner}</div>')

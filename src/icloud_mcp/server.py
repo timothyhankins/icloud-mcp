@@ -282,7 +282,9 @@ async def smartfolders_run(request):
     if fmt == "json":
         return JSONResponse(result)
     if fmt == "html":
-        return HTMLResponse(smartfolders.render_html(result))
+        return HTMLResponse(
+            smartfolders.render_html(result, link_days=params.get("link_days"))
+        )
     return PlainTextResponse(result["text"])
 
 
