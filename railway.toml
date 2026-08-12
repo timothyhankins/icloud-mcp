@@ -1,6 +1,6 @@
 [build]
 dockerfilePath = "Dockerfile"
-watchPatterns = ["src/**", "Dockerfile", "pyproject.toml", "railway.toml"]
+watchPatterns = ["src/**", "Dockerfile", "pyproject.toml", "requirements.lock", "railway.toml"]
 
 [deploy]
 healthcheckPath = "/.well-known/oauth-authorization-server"
