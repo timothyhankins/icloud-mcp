@@ -2,6 +2,7 @@
 
 import imaplib
 import smtplib
+from email.utils import formataddr
 import email
 import logging
 import sys
@@ -545,7 +546,9 @@ async def send_message(
     # Create message
     msg = MIMEMultipart('alternative') if html else MIMEText(body)
 
-    msg['From'] = username
+    # The sender can differ from the iCloud login, e.g. a custom-domain alias
+    sender = config.FROM_EMAIL or username
+    msg['From'] = formataddr((config.FROM_NAME, sender)) if config.FROM_NAME else sender
     msg['To'] = to
     msg['Subject'] = subject
 
@@ -565,7 +568,7 @@ async def send_message(
         if bcc:
             recipients.extend([addr.strip() for addr in bcc.split(',')])
 
-        client.send_message(msg, from_addr=username, to_addrs=recipients)
+        client.send_message(msg, from_addr=sender, to_addrs=recipients)
 
     # Save copy to Sent folder via IMAP
     imap_client = None

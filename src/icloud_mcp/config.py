@@ -30,6 +30,10 @@ class Config:
     MCP_AUTH_PIN: Optional[str] = os.getenv("MCP_AUTH_PIN")
     MCP_BASE_URL: str = os.getenv("MCP_BASE_URL", "")
 
+    # Optional sender for email_send (defaults to the iCloud login)
+    FROM_EMAIL: Optional[str] = os.getenv("ICLOUD_FROM_EMAIL") or None
+    FROM_NAME: Optional[str] = os.getenv("ICLOUD_FROM_NAME") or None
+
     # Fallback credentials (if not provided in headers)
     FALLBACK_EMAIL: Optional[str] = os.getenv("ICLOUD_EMAIL")
     FALLBACK_PASSWORD: Optional[str] = os.getenv("ICLOUD_APP_SPECIFIC_PASSWORD")
